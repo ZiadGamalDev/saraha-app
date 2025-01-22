@@ -1,21 +1,22 @@
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const transporter = nodemailer.createTransport({
-    host: "smtp.ethereal.email",
-    port: 587,
-    secure: false, 
+    service: process.env.EMAIL_SERVICE,
     auth: {
-        user: "lisette.schneider14@ethereal.email",
-        pass: "pWPDsBkZ6ggdGpMtue",
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
     },
 });
 
-export const sendMail = (to, subject, text) => {
+export const sendMail = (to, subject, html) => {
     const mailOptions = {
-        from: "lisette.schneider14@ethereal.email",
+        from: process.env.EMAIL_USER,
         to,
         subject,
-        text,
+        html,
     };
 
     return transporter.sendMail(mailOptions);

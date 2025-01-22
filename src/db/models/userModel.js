@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
         default: userRole.USER
     },
     phone: String,
+    isVerified: {
+        type: Boolean,
+        default: false
+    }
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

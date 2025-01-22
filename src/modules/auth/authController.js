@@ -1,7 +1,9 @@
 import User from '../../db/models/userModel.js';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import { encrypt, decrypt } from '../../utils/crypto.js';
 import { sendMail } from '../../utils/mail.js';
+import { template } from '../../utils/template.js';
 
 const authController = {
     async register(req, res) {
@@ -35,17 +37,23 @@ const authController = {
         password = await bcrypt.hash(password, saltRounds);
 
         try {
-            const user = await User.create({ email, password, phone });
+            const user = await User.create({ email, password, phone, isVerified: false });
 
             user.password = undefined;
             if (user.phone) {
                 user.phone = decrypt(user.phone);
             }
 
-            // Send welcome email
-            await sendMail(user.email, 'Welcome to Saraha App', 'Thank you for registering!');
-            
-            res.status(201).json(user);
+            // Send welcome and verification email
+            await sendMail(email, 'Welcome to Saraha App', template('email', 'welcome.html'));
+            const emailToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+            const verifyLink = `${process.env.APP_BASE_URL}/auth/email/verify/${emailToken}`;
+            const emailTemplate = template('email', 'verification.html').replace('{{verifyLink}}', verifyLink);
+            await sendMail(email, 'Verify your email', emailTemplate);
+
+            const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+            res.status(201).json({ user, token });
         } catch (err) {
             res.status(500).json({ message: 'Internal server error' });
         }
@@ -70,13 +78,56 @@ const authController = {
             return res.status(400).json({ message: 'Invalid password' });
         }
 
+        if (!user.isVerified) {
+            return res.status(400).json({ message: 'Please verify your email to login' });
+        }
+
+        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
         user.password = undefined;
         if (user.phone) {
             user.phone = decrypt(user.phone);
         }
         
-        res.status(200).json(user);
+        res.status(200).json({ user, token });
     },
+
+    async verifyEmail(req, res) {
+        const { token } = req.params;
+
+        try {
+            const { email } = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await User.findOneAndUpdate(
+                { email },
+                { isVerified: true }
+            );
+
+            if (!user) {
+                return res.status(400).json({ message: 'Invalid or expired token' });
+            }
+
+            res.send('<h1>Email verified successfully</h1>');
+        } catch (err) {
+            res.status(400).json({ message: 'Invalid or expired token' });
+        }
+    },
+
+    async logout(req, res) {
+        const { token } = req.headers;
+
+        // validate
+        if (!token) {
+            return res.status(400).json({ message: 'Token is required' });
+        }
+
+        try {
+            jwt.verify(token, process.env.JWT_SECRET);
+
+            res.status(200).json({ message: 'Logged out successfully' });
+        } catch (err) {
+            res.status(400).json({ message: 'Invalid token' });
+        }
+    }
 };
 
 export default authController;
