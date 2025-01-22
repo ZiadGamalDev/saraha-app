@@ -28,14 +28,14 @@ const authController = {
             // Send welcome and verification email
             if (process.env.EMAIL_ENABLED === 'yes') {
                 await sendMail(email, 'Welcome to Saraha App', template('email', 'welcome.html'));
-                const emailToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+                const emailToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EMAIL_EXPIRY });
                 const verifyLink = `${process.env.APP_BASE_URL}/auth/email/verify/${emailToken}`;
                 const emailTemplate = template('email', 'verification.html').replace('{{verifyLink}}', verifyLink);
                 await sendMail(email, 'Verify your email', emailTemplate);
             }
 
-            const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
-            const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+            const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
+            const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY });
 
             await RefreshToken.create({
                 userId: user._id,
@@ -66,11 +66,11 @@ const authController = {
             return res.status(400).json({ message: 'Please verify your email to login' });
         }
 
-        const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+        const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
 
         let refreshToken = await RefreshToken.findOne({ userId: user._id });
         if (!refreshToken || new Date(refreshToken.expiresAt) < new Date()) {
-            refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+            refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY });
             await RefreshToken.create({
                 userId: user._id,
                 token: refreshToken,
@@ -106,9 +106,10 @@ const authController = {
             }
 
             const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-            const accessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+            const accessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
+            const accessExpiry = Math.round((jwt.decode(accessToken).exp - Date.now() / 1000) / 60);
 
-            res.status(200).json({ accessToken });
+            res.status(200).json({ accessToken, accessExpiry });
         } catch (err) {
             res.status(400).json({ message: 'Invalid refresh token' });
         }
