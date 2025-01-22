@@ -88,28 +88,8 @@ const authController = {
         if (user.phone) {
             user.phone = decrypt(user.phone);
         }
-        
+
         res.status(200).json({ user, token });
-    },
-
-    async verifyEmail(req, res) {
-        const { token } = req.params;
-
-        try {
-            const { email } = jwt.verify(token, process.env.JWT_SECRET);
-            const user = await User.findOneAndUpdate(
-                { email },
-                { isVerified: true }
-            );
-
-            if (!user) {
-                return res.status(400).json({ message: 'Invalid or expired token' });
-            }
-
-            res.send('<h1>Email verified successfully</h1>');
-        } catch (err) {
-            res.status(400).json({ message: 'Invalid or expired token' });
-        }
     },
 
     async logout(req, res) {
@@ -121,11 +101,41 @@ const authController = {
         }
 
         try {
-            jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await User.findById(decoded.id);
+
+            if (!user || user.expiredTokens.includes(token)) {
+                return res.status(400).json({ message: 'Unauthenticated' });
+            }
+
+            user.expiredTokens.push(token);
+            await user.save();
 
             res.status(200).json({ message: 'Logged out successfully' });
         } catch (err) {
             res.status(400).json({ message: 'Invalid token' });
+        }
+    },
+
+    async verifyEmail(req, res) {
+        const { token } = req.params;
+
+        try {
+            const { email } = jwt.verify(token, process.env.JWT_SECRET);
+
+            const user = await User.findOne({ email });
+
+            if (!user || user.expiredTokens.includes(token)) {
+                return res.send('<h1>Invalid or Expired Token</h1>');
+            }
+
+            user.isVerified = true;
+            user.expiredTokens.push(token);
+            await user.save();
+
+            res.send('<h1>Email Verified Successfully</h1>');
+        } catch (err) {
+            res.status(400).send('<h1>Invalid or Expired Token</h1>');
         }
     }
 };
