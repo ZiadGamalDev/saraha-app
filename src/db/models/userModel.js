@@ -26,8 +26,7 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    image: String,
-    expiredTokens: [String],
+    image: String
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

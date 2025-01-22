@@ -2,7 +2,7 @@ import Joi from 'joi';
 import User from '../../db/models/userModel.js';
 
 const authValidation = {
-  register: async (body) => {
+  register: async ({ body }) => {
     const schema = Joi.object({
       email: Joi.string().email().required(),
       password: Joi.string().min(6).required().messages({
@@ -19,10 +19,8 @@ const authValidation = {
       phone: Joi.string().optional(),
     });
 
-    const { error } = await schema.validateAsync(body);
-    if (error) {
-      return { error };
-    }
+    const { error } = await schema.validateAsync(body, { abortEarly: false });
+    if (error) return { error };
 
     // Custom validation for unique email and phone
     const existingUser = await User.findOne({ email: body.email });
@@ -40,7 +38,7 @@ const authValidation = {
     return {};
   },
 
-  login: (body) => {
+  login: async ({ body }) => {
     const schema = Joi.object({
       email: Joi.string().email().required().messages({
         'string.email': 'Invalid email',
@@ -51,7 +49,7 @@ const authValidation = {
       }),
     });
 
-    const { error } = schema.validate(body);
+    const { error } = schema.validate(body, { abortEarly: false });
     return error ? { error } : {};
   },
 };
