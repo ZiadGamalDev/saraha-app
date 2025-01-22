@@ -7,34 +7,14 @@ import { template } from '../../utils/template.js';
 
 const authController = {
     async register(req, res) {
-        let { email, password, confirmedPassword, phone } = req.body;
+        let { email, password, phone } = req.body;
 
-        // validate
-        if (!email || !password) {
-            return res.status(400).json({ message: 'Email and password are required' });
-        }
-        if (password !== confirmedPassword) {
-            return res.status(400).json({ message: 'Passwords do not match' });
-        }
-        if (password.length < 6) {
-            return res.status(400).json({ message: 'Password must be at least 6 characters long' });
-        }
-        if (!email.includes('@')) {
-            return res.status(400).json({ message: 'Invalid email' });
-        }
-        if (await User.findOne({ email })) {
-            return res.status(400).json({ message: 'Email already exists' });
-        }
-        if (phone) {
-            if (await User.findOne({ phone })) {
-                return res.status(400).json({ message: 'Phone number already exists' });
-            }
-            phone = encrypt(phone);
-        }
-
-        // hash password
+        // hash password and encrypt phone number
         const saltRounds = parseInt(process.env.SALT_ROUNDS);
         password = await bcrypt.hash(password, saltRounds);
+        if (phone) {
+            phone = encrypt(phone);
+        }
 
         try {
             const user = await User.create({ email, password, phone, isVerified: false });
@@ -45,11 +25,13 @@ const authController = {
             }
 
             // Send welcome and verification email
-            await sendMail(email, 'Welcome to Saraha App', template('email', 'welcome.html'));
-            const emailToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-            const verifyLink = `${process.env.APP_BASE_URL}/auth/email/verify/${emailToken}`;
-            const emailTemplate = template('email', 'verification.html').replace('{{verifyLink}}', verifyLink);
-            await sendMail(email, 'Verify your email', emailTemplate);
+            if (process.env.EMAIL_ENABLED === 'y') {
+                await sendMail(email, 'Welcome to Saraha App', template('email', 'welcome.html'));
+                const emailToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+                const verifyLink = `${process.env.APP_BASE_URL}/auth/email/verify/${emailToken}`;
+                const emailTemplate = template('email', 'verification.html').replace('{{verifyLink}}', verifyLink);
+                await sendMail(email, 'Verify your email', emailTemplate);
+            }
 
             const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
@@ -61,11 +43,6 @@ const authController = {
 
     async login(req, res) {
         const { email, password } = req.body;
-
-        // validate
-        if (!email || !password) {
-            return res.status(400).json({ message: 'Email and password are required' });
-        }
 
         const user = await User.findOne({ email });
 
