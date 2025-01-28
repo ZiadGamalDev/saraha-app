@@ -4,6 +4,7 @@ import file from '../../utils/file.js';
 const authController = {
     async show(req, res) {
         const user = await User.findById(req.userId).select('-password');
+        
         res.json(user);
     },
 
@@ -24,6 +25,10 @@ const authController = {
             { name, phone, image },
             { new: true, runValidators: true }
         ).select('-password');
+
+        if (updatedUser.image) {
+            updatedUser.image = `${process.env.APP_BASE_URL}/${updatedUser.image}`;
+        }
 
         res.json(updatedUser);
     }

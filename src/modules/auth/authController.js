@@ -1,18 +1,16 @@
 import User from '../../db/models/userModel.js';
-import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { encrypt, decrypt } from '../../utils/crypto.js';
+import { encrypt, decrypt, hash, compare } from '../../utils/crypto.js';
 import { sendMail } from '../../utils/mail.js';
 import { template } from '../../utils/template.js';
 import RefreshToken from '../../db/models/refreshTokenModel.js';
+import BlacklistToken from '../../db/models/blacklistTokenModel.js';
 
 const authController = {
     async register(req, res) {
         let { email, password, phone } = req.body;
 
-        // hash password and encrypt phone number
-        const saltRounds = parseInt(process.env.SALT_ROUNDS);
-        password = await bcrypt.hash(password, saltRounds);
+        password = await hash(password);
         if (phone) {
             phone = encrypt(phone);
         }
@@ -27,11 +25,13 @@ const authController = {
 
             // Send welcome and verification email
             if (process.env.EMAIL_ENABLED === 'yes') {
+                console.log('Email sending...');
                 await sendMail(email, 'Welcome to Saraha App', template('email', 'welcome.html'));
                 const emailToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EMAIL_EXPIRY });
                 const verifyLink = `${process.env.APP_BASE_URL}/auth/email/verify/${emailToken}`;
                 const emailTemplate = template('email', 'verification.html').replace('{{verifyLink}}', verifyLink);
                 await sendMail(email, 'Verify your email', emailTemplate);
+                console.log('Email sent');
             }
 
             const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
@@ -53,17 +53,8 @@ const authController = {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
 
-        if (!user) {
-            return res.status(400).json({ message: 'Email does not exist' });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
+        if (!await compare(password, user.password)) {
             return res.status(400).json({ message: 'Invalid password' });
-        }
-
-        if (!user.isVerified) {
-            return res.status(400).json({ message: 'Please verify your email to login' });
         }
 
         const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
@@ -71,6 +62,7 @@ const authController = {
         let refreshToken = await RefreshToken.findOne({ userId: user._id });
         if (!refreshToken || new Date(refreshToken.expiresAt) < new Date()) {
             refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY });
+
             await RefreshToken.create({
                 userId: user._id,
                 token: refreshToken,
@@ -89,6 +81,15 @@ const authController = {
     },
 
     async logout(req, res) {
+        // revoke the access token (Move it to blacklist)
+        const accessToken = req.headers.authorization?.split(' ')[1];
+
+        if (await BlacklistToken.exists({ accessToken })) {
+            return res.status(401).json({ message: 'Token is already blacklisted' });
+        }
+
+        await BlacklistToken.create({ token: accessToken, blacklistedAt: new Date() });
+
         res.status(200).json({ message: 'Logged out successfully' });
     },
 
@@ -101,6 +102,7 @@ const authController = {
 
         try {
             const storedToken = await RefreshToken.findOne({ token: refreshToken });
+
             if (!storedToken || new Date(storedToken.expiresAt) < new Date()) {
                 return res.status(400).json({ message: 'Invalid refresh token' });
             }
@@ -124,7 +126,7 @@ const authController = {
             const user = await User.findOne({ email });
 
             if (!user) {
-                return res.status(404).send(template('errors', '404.html'));
+                return res.status(404).send(template('error', '404.html'));
             }
 
             if (user.isVerified) {

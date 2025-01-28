@@ -14,9 +14,8 @@ const messageValidation = {
             return { error };
         }
 
-        // Check if receiverId exists in user collection
-        const isExists = await User.exists({ _id: body.receiverId });
-        if (!isExists) {
+        // Check receiverId exists
+        if (!await User.exists({ _id: body.receiverId })) {
             return { error: { details: [{ message: 'Receiver not found' }] } };
         }
 
@@ -24,9 +23,8 @@ const messageValidation = {
     },
 
     delete: async ({ params }) => {
-        // Check if message exists
-        const isExists = await Message.exists({ _id: params.id });
-        if (!isExists) {
+        // Check message exists
+        if (!await Message.exists({ _id: params.id })) {
             return { error: { details: [{ message: 'Message not found' }] } };
         }
 

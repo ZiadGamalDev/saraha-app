@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 
 const getKeyLength = () => {
     const keyLength = parseInt(process.env.ENCRYPTION_KEY_LENGTH, 10);
@@ -34,4 +35,13 @@ export const decrypt = (text) => {
     let decrypted = decipher.update(encryptedText);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
     return decrypted.toString();
+};
+
+export const hash = (password) => {
+    const saltRounds = parseInt(process.env.SALT_ROUNDS, 10);
+    return bcrypt.hash(password, saltRounds);
+};
+
+export const compare = (password, hash) => {
+    return bcrypt.compare(password, hash);
 };

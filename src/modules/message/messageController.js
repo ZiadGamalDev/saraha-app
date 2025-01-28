@@ -18,12 +18,11 @@ const messageController = {
     },
 
     delete: async (req, res) => {
-        const receiverId = req.userId;
         const { id } = req.params;
         
-        const message = await Message.deleteOne({ _id: id, receiverId });
+        await Message.deleteOne({ _id: id });
 
-        res.json({ message: 'Message deleted' });
+        res.json({ message: 'Message deleted successfully' });
     }
 };
 

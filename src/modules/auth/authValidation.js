@@ -22,15 +22,12 @@ const authValidation = {
     const { error } = await schema.validateAsync(body, { abortEarly: false });
     if (error) return { error };
 
-    // Custom validation for unique email and phone
-    const existingUser = await User.findOne({ email: body.email });
-    if (existingUser) {
+    // Check unique email and phone
+    if (await User.findOne({ email: body.email })) {
       return { error: { details: [{ message: 'Email already exists' }] } };
     }
-
     if (body.phone) {
-      const existingPhoneUser = await User.findOne({ phone: body.phone });
-      if (existingPhoneUser) {
+      if (await User.findOne({ phone: body.phone })) {
         return { error: { details: [{ message: 'Phone number already exists' }] } };
       }
     }
@@ -50,7 +47,14 @@ const authValidation = {
     });
 
     const { error } = schema.validate(body, { abortEarly: false });
-    return error ? { error } : {};
+    if (error) return { error };
+
+    // Check email exists
+    if (!await User.findOne({ email: body.email })) {
+      return { error: { details: [{ message: 'Email does not exist' }] } };
+    }
+
+    return {};
   },
 };
 

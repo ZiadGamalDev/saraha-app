@@ -8,6 +8,6 @@ import upload from '../../middlewares/configMulter.js';
 const router = Router();
 
 router.get('/', authenticate, profileController.show);
-router.put('/', upload.single('image'), authenticate, validate(profileValidation.update), profileController.update);
+router.put('/', authenticate, validate(profileValidation.update), upload.single('image'), profileController.update);
 
 export default router;
