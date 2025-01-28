@@ -1,146 +1,70 @@
-import User from '../../db/models/userModel.js';
-import jwt from 'jsonwebtoken';
-import { encrypt, decrypt, hash, compare } from '../../utils/crypto.js';
-import { sendMail } from '../../utils/mail.js';
-import { template } from '../../utils/template.js';
-import RefreshToken from '../../db/models/refreshTokenModel.js';
-import BlacklistToken from '../../db/models/blacklistTokenModel.js';
+import authService from './authService.js';
+import { authResource } from './authResource.js';
 
 const authController = {
     async register(req, res) {
-        let { email, password, phone } = req.body;
-
-        password = await hash(password);
-        if (phone) {
-            phone = encrypt(phone);
-        }
-
         try {
-            const user = await User.create({ email, password, phone, isVerified: false });
+            const { email, password, phone } = req.body;
 
-            user.password = undefined;
-            if (user.phone) {
-                user.phone = decrypt(user.phone);
-            }
+            const user = await authService.create(email, password, phone);
+            const accessToken = await authService.generateAccessToken(user);
+            const refreshToken = await authService.generateRefreshToken(user);
+            await authService.sendWelcomeEmail(user);
+            await authService.sendVerificationEmail(user);
 
-            // Send welcome and verification email
-            if (process.env.EMAIL_ENABLED === 'yes') {
-                console.log('Email sending...');
-                await sendMail(email, 'Welcome to Saraha App', template('email', 'welcome.html'));
-                const emailToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EMAIL_EXPIRY });
-                const verifyLink = `${process.env.APP_BASE_URL}/auth/email/verify/${emailToken}`;
-                const emailTemplate = template('email', 'verification.html').replace('{{verifyLink}}', verifyLink);
-                await sendMail(email, 'Verify your email', emailTemplate);
-                console.log('Email sent');
-            }
-
-            const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
-            const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY });
-
-            await RefreshToken.create({
-                userId: user._id,
-                token: refreshToken,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            });
-
-            res.status(201).json({ user, accessToken, refreshToken });
+            return res.status(201).json(authResource(user, accessToken, refreshToken));
         } catch (err) {
-            res.status(500).json({ message: 'Internal server error' });
+            res.status(500).json({ message: err.message || 'Internal server error' });
         }
     },
 
     async login(req, res) {
-        const { email, password } = req.body;
-        const user = await User.findOne({ email });
+        try {
+            const { email, password } = req.body;
 
-        if (!await compare(password, user.password)) {
-            return res.status(400).json({ message: 'Invalid password' });
+            const user = await authService.validateCredentials(email, password);
+            const accessToken = await authService.generateAccessToken(user);
+            const refreshToken = await authService.checkRefreshToken(user);
+
+            res.status(200).json(authResource(user, accessToken, refreshToken));
+        } catch (err) {
+            res.status(400).json({ message: err.message || 'Invalid credentials' });
         }
-
-        const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
-
-        let refreshToken = await RefreshToken.findOne({ userId: user._id });
-        if (!refreshToken || new Date(refreshToken.expiresAt) < new Date()) {
-            refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY });
-
-            await RefreshToken.create({
-                userId: user._id,
-                token: refreshToken,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            });
-        } else {
-            refreshToken = refreshToken.token;
-        }
-
-        user.password = undefined;
-        if (user.phone) {
-            user.phone = decrypt(user.phone);
-        }
-
-        res.status(200).json({ user, accessToken, refreshToken });
     },
 
     async logout(req, res) {
-        // revoke the access token (Move it to blacklist)
-        const accessToken = req.headers.authorization?.split(' ')[1];
+        try {
+            await authService.revokeAccessToken(req);
 
-        if (await BlacklistToken.exists({ accessToken })) {
-            return res.status(401).json({ message: 'Token is already blacklisted' });
+            res.status(200).json({ message: 'Logged out successfully' });
+        } catch (err) {
+            res.status(500).json({ message: err.message || 'Internal server error' });
         }
-
-        await BlacklistToken.create({ token: accessToken, blacklistedAt: new Date() });
-
-        res.status(200).json({ message: 'Logged out successfully' });
     },
 
     async refresh(req, res) {
-        const refreshToken = req.header('X-Refresh-Token');
-
-        if (!refreshToken) {
-            return res.status(400).json({ message: 'Refresh token is required' });
-        }
-
         try {
-            const storedToken = await RefreshToken.findOne({ token: refreshToken });
+            const refreshToken = req.header('X-Refresh-Token');
 
-            if (!storedToken || new Date(storedToken.expiresAt) < new Date()) {
-                return res.status(400).json({ message: 'Invalid refresh token' });
-            }
-
-            const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-            const accessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY });
-            const accessExpiry = Math.round((jwt.decode(accessToken).exp - Date.now() / 1000) / 60);
+            const { accessToken, accessExpiry } = await authService.refreshAccessToken(refreshToken);
 
             res.status(200).json({ accessToken, accessExpiry });
         } catch (err) {
-            res.status(400).json({ message: 'Invalid refresh token' });
+            res.status(400).json({ message: err.message || 'Invalid refresh token' });
         }
     },
 
     async verifyEmail(req, res) {
-        const { token } = req.params;
-
         try {
-            const { email } = jwt.verify(token, process.env.JWT_SECRET);
-
-            const user = await User.findOne({ email });
-
-            if (!user) {
-                return res.status(404).send(template('error', '404.html'));
-            }
-
-            if (user.isVerified) {
-                return res.status(400).send('<h1>Email is already verified</h1>');
-            }
-
-            user.isVerified = true;
-            await user.save();
-
+            const { token } = req.params;
+            
+            await authService.verifyEmail(token);
+            
             res.send('<h1>Email Verified Successfully</h1>');
         } catch (err) {
-            res.status(400).send('<h1>Invalid or Expired Token</h1>');
+            res.status(400).send(`<h1>${err.message}</h1>`);
         }
-    }
+    },
 };
 
 export default authController;

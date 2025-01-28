@@ -1,8 +1,8 @@
 const validate = (schema) => {
     return async (req, res, next) => {
         try {
-            const { body, params } = req;
-            const { error } = await schema({ body, params });
+            const { body, params, headers } = req;
+            const { error } = await schema({ body, params, headers });
 
             if (error) {
                 const message = error.details?.[0]?.message || 'Validation failed';
