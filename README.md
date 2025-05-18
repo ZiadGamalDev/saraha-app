@@ -1,40 +1,71 @@
-# Saraha App
+# Saraha App API (Node.js)
 
-This is a simple Saraha application built with Node.js.
+This is a simple **anonymous messaging backend** inspired by the Saraha app.  
+It allows users to register, verify their accounts, and receive messages from others *without knowing the sender*.
 
 ## Features
 
-- User registration and login
-- Anonymous messaging
-- Message management
+- **User Registration, Login, Logout**  
+- **Email Verification**  
+- **Profile Management** (Update info, upload profile image)  
+- **Anonymous Messaging System**  
+- **JWT Authentication** (Access + Refresh Tokens)  
+- **Multer for image uploads**  
+- **Environment Config Support**  
+- **Centralized Error Handling**  
+- **MongoDB with Mongoose Models**  
 
-## Installation
+## Folder Structure
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/ZiadGamalDev/saraha-app.git
-    ```
-2. Navigate to the project directory:
-    ```sh
-    cd saraha-app
-    ```
-3. Install the dependencies:
-    ```sh
-    npm install
-    ```
+```
+src/
+├── db/            # MongoDB connection & seeders
+├── middlewares/   # Validation, Authentication, Multer config, etc.
+├── modules/       # Modules for Auth, Profile, Message
+├── templates/     # Email and error HTML templates
+├── utils/         # Mail, file, crypto utilities
+├── app.js         # Main express app config
+uploads/           # Uploaded images
+.env               # Environment variables (excluded)
+server.js          # Entry point
+```
 
-## Usage
+## Installation & Setup
 
-1. Start the server:
-    ```sh
-    npm start
-    ```
-2. Open your browser and navigate to `http://localhost:3000`
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/ZiadGamalDev/saraha-app.git
+   cd saraha-app
+   ```
 
-## Contributing
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-Feel free to submit issues and pull requests.
+3. **Set environment variables**
+   Rename .env.example to .env and fill in your config (MongoDB URI, JWT secrets, etc.)
 
-## License
+4. **Run the project**
+   ```bash
+   npm start
+   ```
 
-This project is licensed under the MIT License.
+## API Testing
+
+Use Postman or any REST client.
+If available, import the provided Postman collection from the public/ folder.
+
+## Tech Stack
+
+- **Node.js + Express.js**
+- **MongoDB + Mongoose**
+- **JWT for Auth**
+- **Multer for file uploads**
+- **Nodemailer for email handling**
+
+## Note
+
+This project was built as part of the ITI Node.js course to practice building REST APIs with full authentication, validation, and messaging logic.
+
+**Frontend is not included. This project is backend-only.**
